@@ -23,3 +23,11 @@ if unclear. Log design changes in docs/decisions.md AND update the doc.
 - Never touch .env or print secrets. Never auto-send email — drafts only.
 - Schema changes only via Alembic. New categories only via user approval flow.
 - After changing any LLM prompt, run the eval suite before committing.
+
+## Working style
+- After giving code, config, or a command, explain each part — what it does
+  and why — as a beginner-friendly walkthrough. The author is learning; teach,
+  don't just deliver. Flag typos/mistakes in the author's files when reviewing.
+- Before/after running any command, explain what it does, why we're running it,
+  and what each part means (flags, paths, sub-commands). Assume the author is
+  learning the tooling, not just the code.
