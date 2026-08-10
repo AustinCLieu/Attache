@@ -1,0 +1,20 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: attache-db
+    environment:
+      POSTGRES_USER: attache
+      POSTGRES_PASSWORD: attache
+      POSTGRES_DB: attache
+    ports:
+      - "5432:5432"
+    volumes:
+      - attache_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U attache -d attache"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  attache_pgdata:
