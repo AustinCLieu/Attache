@@ -1,6 +1,8 @@
 # Attaché — AI chief-of-staff dashboard
 
 Full design doc: @docs/ATTACHE_DESIGN.md (architecture, schema, milestones).
+Current progress: @docs/progress.md — where we are in the build (milestone,
+phase, next action). Update it as parts complete; commit it with the work.
 We build milestone by milestone (doc §13). Ask which milestone we're on
 if unclear. Log design changes in docs/decisions.md AND update the doc.
 
