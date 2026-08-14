@@ -5,7 +5,8 @@ session via CLAUDE.md. Update this as parts complete; commit it with the work.
 Git history = what's done; this file = the plan, the phase breakdown, and the
 next action.
 
-**Current position:** Milestone 1 → Phase A → Parts 5–7 next.
+**Current position:** Phase A complete. Milestone 1 → Phase B → `app/models.py`
+(`users` table) next.
 
 ---
 
@@ -22,9 +23,9 @@ through them one at a time so the author can learn (see CLAUDE.md Working style)
 - [x] Part 2 — `.gitignore` — commit `8a18073`
 - [x] Part 3 — `backend/pyproject.toml` + `.venv` (deps installed) — commit `8a18073`
 - [x] Part 4 — `backend/.env.example` (committed) + `.env` (git-ignored, real keys generated) — commit `8a18073`
-- [ ] Part 5 — `app/config.py` (pydantic-settings; loads & validates `.env`, fails fast)
-- [ ] Part 6 — `app/database.py` (SQLAlchemy 2.0 engine, SessionLocal, Base, `get_db`)
-- [ ] Part 7 — `app/security.py` (argon2 hashing, JWT create/verify, Fernet helper)
+- [x] Part 5 — `app/config.py` (pydantic-settings; loads & validates `.env`, fails fast) — verified
+- [x] Part 6 — `app/database.py` (SQLAlchemy 2.0 engine, SessionLocal, Base, `get_db`) — verified (SELECT 1 OK)
+- [x] Part 7 — `app/security.py` (argon2 hashing, JWT create/verify, Fernet helpers) — verified
 - Parts 5–7 → second commit (`feat: backend foundation modules`)
 
 ### Phase B — Data + auth (backend)
