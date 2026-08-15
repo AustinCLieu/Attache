@@ -5,9 +5,9 @@ session via CLAUDE.md. Update this as parts complete; commit it with the work.
 Git history = what's done; this file = the plan, the phase breakdown, and the
 next action.
 
-**Current position:** Milestone 1 → Phase B → `app/schemas.py` next.
-Parts 1–2 of Phase B done (`users` model + Alembic baseline applied; DB at
-revision `001`).
+**Current position:** Milestone 1 → Phase B → `api/deps.py` next.
+Parts 1–4 of Phase B done (`users` model, Alembic at revision `001`, schemas,
+user repository).
 
 ---
 
@@ -32,8 +32,8 @@ through them one at a time so the author can learn (see CLAUDE.md Working style)
 ### Phase B — Data + auth (backend)
 - [x] `app/models.py` — `users` table (tenancy root)
 - [x] Alembic baseline + `001_users.py` migration — `alembic upgrade head` applied
-- [ ] `app/schemas.py` — Pydantic I/O (signup, login, user out)
-- [ ] `repositories/user_repo.py` — the only SQL for users
+- [x] `app/schemas.py` — Pydantic I/O (signup, login, user out)
+- [x] `repositories/user_repo.py` — get_by_id / get_by_email / create; verified against live DB
 - [ ] `api/deps.py` — `get_current_user` (identity from JWT only)
 - [ ] `api/routers/auth.py` — signup / login (sets JWT cookie) / me
 - [ ] `app/main.py` — app factory, CORS, router registration
