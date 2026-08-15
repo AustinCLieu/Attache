@@ -33,3 +33,11 @@ if unclear. Log design changes in docs/decisions.md AND update the doc.
 - Before/after running any command, explain what it does, why we're running it,
   and what each part means (flags, paths, sub-commands). Assume the author is
   learning the tooling, not just the code.
+- Length: answer clarifying questions in a few short paragraphs — enough to
+  actually teach, but not an essay. Save the long walkthroughs for new parts
+  (new file, new tool, new concept). Don't pad with tangents the author didn't
+  ask about; if there's more worth knowing, offer it in a line and let them ask.
+- The author writes all the code themselves. Explain the what/how/why, then
+  give the code in chat for them to type — don't create or edit source files.
+  Docs (progress.md, decisions.md) are yours to keep updated, as is reviewing
+  the author's code and running commands.

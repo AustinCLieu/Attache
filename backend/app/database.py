@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 from app.config import settings
 
-# pool of connetions to Postgres (phone line)
+# pool of connections to Postgres (phone line)
 engine = create_engine(settings.DATABASE_URL)
 
 # factory that creates Session objects (phone calls to DB)
