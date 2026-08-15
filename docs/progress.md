@@ -54,8 +54,20 @@ through them one at a time so the author can learn (see CLAUDE.md Working style)
 - [ ] pytest green
 - [ ] Docker image builds
 - [ ] Two-account manual walkthrough (the M1 exit criterion)
+- [ ] README touch-up (see below)
 
 ---
+
+## End-of-milestone checklist (every milestone)
+1. **README touch-up** — update the status line and the run instructions while
+   the steps are still fresh; add anything newly true (a screenshot once there
+   is UI, eval numbers once M5 produces them). Writing these in the moment is
+   the only way they stay accurate.
+2. Update this file: check off the milestone, set the next position.
+3. Log any design drift in `docs/decisions.md` AND in `ATTACHE_DESIGN.md`.
+
+The full README — demo video, screenshots, architecture diagram, tradeoffs
+section — is M7 work (design §13). Everything before that is keeping it honest.
 
 ## Resume checklist (start of each session)
 1. `docker compose start` — bring the DB back up.
