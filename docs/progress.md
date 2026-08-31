@@ -5,9 +5,10 @@ via CLAUDE.md, and updated in the same commit as the work it describes.
 Git history records what shipped; this file records the plan, the current
 position, and the next action.
 
-**Current position:** M1 (Skeleton + auth) → Phase D (frontend shell) next.
-Phases A–C complete: 16 auth tests green, Docker image build-tested and
-verified to boot as a non-root user.
+**Current position:** M1 (Skeleton + auth) → Phase E (verify) next.
+Phases A–D complete. Backend: 16 auth tests green, Docker image build-tested.
+Frontend: Next 16 + React 19 + Tailwind 4 + shadcn, production build clean,
+login round trip verified against the API (HttpOnly cookie + CORS).
 
 Milestones and their exit criteria are defined in `ATTACHE_DESIGN.md` §13.
 Each is broken into phases, and each phase into parts, worked one at a time.
@@ -44,9 +45,9 @@ Each is broken into phases, and each phase into parts, worked one at a time.
 - [x] `backend/Dockerfile` — build-tested; runs non-root, no `--reload`
 
 ### Phase D — Frontend shell
-- [ ] Next.js + TS + Tailwind + shadcn init, `components.json`, `.env.local`
-- [ ] `lib/api.ts`, `lib/types.ts`, `lib/queries.ts`
-- [ ] `app/layout.tsx`, `app/page.tsx`, `app/login/page.tsx`
+- [x] Next.js 16 + TS + Tailwind 4 + shadcn init, `components.json`, `.env.local`
+- [x] `lib/api.ts` (cookie-aware fetch wrapper), `lib/types.ts`, `lib/queries.ts`
+- [x] `app/providers.tsx` (QueryClient), `layout.tsx`, `page.tsx`, `login/page.tsx`
 
 ### Phase E — Verify
 - [ ] pytest green · Docker image builds · two-account walkthrough
