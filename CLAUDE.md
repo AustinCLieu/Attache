@@ -48,6 +48,10 @@ if unclear. Log design changes in docs/decisions.md AND update the doc.
   built that way (and what the alternatives were), and a list of every
   tool/package/keyword introduced — what it is, what it does for us, and why
   it was chosen. Point out anything the author should look at closely.
+- Always track commit points. After each working increment, say explicitly
+  whether it is time to commit, which files to stage, and the message to use
+  (one logical concern per commit; the repo must be left in a working state).
+  Never let uncommitted work pile up silently.
 - The review is the learning, so optimize for readability over cleverness:
   no dense one-liners where three plain ones read better. Design doc §12
   exit criterion still holds — the author must be able to explain every line
