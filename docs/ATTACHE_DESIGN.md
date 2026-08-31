@@ -1,6 +1,6 @@
 # Attaché — Design Doc / SRD
 
-**Version:** 0.4 (final pre-build — consolidated)
+**Version:** 0.5 (adds AWS production deployment — M8)
 **Status:** Live configuration. This doc is loaded by Claude Code via CLAUDE.md every session. Design changes MUST be reflected here and logged in `docs/decisions.md`.
 
 ---
@@ -9,14 +9,14 @@
 
 Attaché is a multi-tenant web dashboard that acts as a digital chief of staff for busy public-facing professionals (first user: a Torrance City Council member). It connects to a user's Outlook mailbox and uses LLMs to triage, summarize, categorize, and draft replies to email — grounded in the user's stored policy positions, matched to their writing style, and checked for consistency against their stated positions. Drafts are never auto-sent; a human reviews everything.
 
-v1 is the email workspace. The architecture and data model anticipate later tabs (people directory, events/calendar) and later monetization without redesign.
+v1 is the email workspace. The architecture and data model anticipate later tabs (people directory, events/calendar) and later monetization without redesign. Production runs on AWS (M8).
 
 ### 1.1 Goals
 - Reduce time spent on email triage and response drafting.
 - Ground every AI draft in the user's stored policies, with citations.
 - Flag inconsistencies between drafts/past emails and current stated policies.
 - Support multiple users with fully isolated data and per-user Microsoft connections.
-- Portfolio-grade AI engineering: RAG, structured outputs, a hand-written agentic tool-use loop, evals as a first-class milestone, OAuth, multi-tenancy.
+- Portfolio-grade AI engineering: RAG, structured outputs, a hand-written agentic tool-use loop, evals as a first-class milestone, OAuth, multi-tenancy, AWS deployment.
 
 ### 1.2 Non-Goals (v1)
 - Auto-sending email (copy-to-Outlook is the v1 send path).
@@ -25,6 +25,7 @@ v1 is the email workspace. The architecture and data model anticipate later tabs
 - Mobile app, push notifications, shared inboxes, admin roles, fine-tuning.
 - Password reset emails, email verification, MFA (documented as production hardening).
 - Billing (designed for in §10, built later).
+- AWS services beyond the M8 set (EC2, Lambda, S3, ECS, DynamoDB — see §3.5 expansion triggers).
 
 ### 1.3 Users
 Primary: an elected official or staffer; non-technical; values trust, control, time saved. Secondary: any professional with a position-heavy inbox.
@@ -63,8 +64,8 @@ Outputs: `summary` (1–3 sentences); `category` (existing) or null + `suggested
 
 ### Non-Functional Requirements
 - **NFR-1 Privacy:** develop only against a seeded test mailbox; real accounts only with the owner's informed consent (constituent email = PII + potential public-records exposure). Bodies go to the LLM API only; never logged elsewhere.
-- **NFR-2 Security:** argon2; JWT expiry; Fernet-encrypted OAuth tokens; every query tenant-filtered; CORS locked; secrets in env only.
-- **NFR-3 Cost:** <=1 LLM call/email for triage; agent only when needed; embeddings cached by text hash; all tokens logged per user (§10).
+- **NFR-2 Security:** argon2; JWT expiry; Fernet-encrypted OAuth tokens; every query tenant-filtered; CORS locked; secrets in env only (Secrets Manager in production).
+- **NFR-3 Cost:** <=1 LLM call/email for triage; agent only when needed; embeddings cached by text hash; all tokens logged per user (§10). AWS Budget alert at $10 before any resource is created.
 - **NFR-4 Reliability:** every pipeline step idempotent and resumable; AI failure never hides raw email; Graph client honors 429 Retry-After.
 
 ---
@@ -78,10 +79,11 @@ Outputs: `summary` (1–3 sentences); `category` (existing) or null + `suggested
 |  (JWT cookie)|             +--------+---------------+---------+
 +--------------+                      |               | (on-demand redraft)
                            +----------v---+       +---v---------+
-                           |  Postgres 16 |       | Claude API  |
-                           |  + pgvector  |       | + embeddings|
-                           |  (Docker)    |       +---^---------+
-                           +------^-------+           |
+                           |  Postgres 16 |       | Anthropic   |
+                           |  + pgvector  |       | API (Claude |
+                           |              |       | +embeddings)|
+                           +------^-------+       +---^---------+
+                                  |                   |
                                   |             +-----+---------------+
                                   +-------------| Worker (APScheduler)|
                                                 | sync->triage->draft |
@@ -93,21 +95,54 @@ Outputs: `summary` (1–3 sentences); `category` (existing) or null + `suggested
                                                 +--------------+
 ```
 
+This logical architecture is environment-independent: in dev, Postgres runs in Docker and the backend runs locally; in production (M8), the same containers and code run on AWS. The LLM is always the Anthropic API directly (not Bedrock — deliberate choice; trade-off documented in README).
+
 ### 3.1 Components
 - **Frontend:** Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + TanStack Query. Logic-free by design: renders, collects input, calls the API. Server state via TanStack Query (cache + invalidate-on-mutation); local UI state via useState. JWT in httpOnly cookie.
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2 (+pydantic-settings). Strict layering — routers (HTTP, auth dependency, Pydantic I/O) -> services (business + AI logic; no HTTP objects) -> repositories (all SQL; every function requires `user_id`).
 - **Worker:** APScheduler in the API process (v1), `max_instances=1`. Jobs call the services layer — the same code the API calls, so graduating to a separate process or Celery later is a deployment change, not a rewrite.
-- **DB:** Postgres 16 + pgvector, Docker (`pgvector/pgvector:pg16`, named volume). The DB is also the job queue: each pipeline step's SELECT defines its backlog (§5.2).
-- **LLM:** Claude API (structured outputs for triage, tool use for the agent) + a separate embeddings API behind one module. No LangChain/LangGraph — the loop and retrieval are hand-written (core learning goal). README documents what frameworks would add and when to adopt.
+- **DB:** Postgres 16 + pgvector. Dev: Docker (`pgvector/pgvector:pg16`, named volume). Production: Amazon RDS (same version + extension; schema and migrations identical). The DB is also the job queue: each pipeline step's SELECT defines its backlog (§5.2).
+- **LLM:** Anthropic API (structured outputs for triage, tool use for the agent) + a separate embeddings API behind one module. No LangChain/LangGraph — the loop and retrieval are hand-written (core learning goal). README documents what frameworks would add and when to adopt.
 
 ### 3.2 Multi-tenancy
 Single schema, `user_id` on every tenant-owned table. Three enforcement layers: (1) `Depends(get_current_user)` — identity from verified JWT only; (2) repositories require + apply `user_id`; (3) agent tools take `user_id`, so retrieval can never cross tenants. Stretch: Postgres RLS.
 
 ### 3.3 Microsoft Graph
-Azure app registration; auth-code flow + PKCE + `state` (CSRF); `msal` for token exchange/refresh. Delta sync per folder per user (`/me/mailFolders/{inbox|sentitems}/messages/delta`); tokens in `ms_connections`; first sync = full paginated pull. One `graph_client.py` wrapper: tokens, pagination, 429.
+Azure app registration; auth-code flow + PKCE + `state` (CSRF); `msal` for token exchange/refresh. Delta sync per folder per user (`/me/mailFolders/{inbox|sentitems}/messages/delta`); tokens in `ms_connections`; first sync = full paginated pull. One `graph_client.py` wrapper: tokens, pagination, 429. Note: `MS_REDIRECT_URI` is env config; the production (App Runner) URI is added to the Azure registration at M8 alongside localhost.
 
-### 3.4 Deployment path
-Dev: `docker compose up -d` (DB) + `uvicorn --reload` + `npm run dev`. Ship (M7): Vercel (frontend) + Railway/Render (API + worker + Postgres) using the backend Dockerfile. AWS migration documented as future work. The Dockerfile is written in M1 and build-tested throughout so deploy week holds no surprises.
+### 3.4 Environments & deployment
+
+**Dev (daily):** `docker compose up -d` (DB) + `uvicorn --reload` + `npm run dev`.
+
+**Initial deploy (M7):** Vercel (frontend) + Railway/Render (API + worker + Postgres) using the backend Dockerfile. Purpose: a live demo URL with one afternoon of effort, before the AWS migration.
+
+**Production (M8) — AWS, minimal-by-design (5 services + free logging):**
+
+```
+Browser ── Vercel (Next.js) ── AWS App Runner (FastAPI + worker container)
+                                    │  ▲                  │
+                                    │  └─ image from ECR  └──> Anthropic API
+                                    ▼
+                              Amazon RDS (Postgres 16 + pgvector)
+
+              Secrets Manager ──> env vars into App Runner (read by BaseSettings)
+              IAM roles: App Runner may pull ECR + read secrets
+              CloudWatch <── App Runner logs (automatic)
+```
+
+| Service | Role in Attaché |
+|---|---|
+| **ECR** | Private registry holding the backend Docker image; `docker push` per release |
+| **App Runner** | Runs the image as the live API + worker: HTTPS, scaling, rolling deploys |
+| **RDS** (Postgres 16 + pgvector) | Production database; `alembic upgrade head` against its URL; dev Docker DB unchanged |
+| **Secrets Manager** | Production `.env`: DATABASE_URL, keys, MS credentials — injected as env vars, zero code changes |
+| **IAM** | Roles wiring the above (App Runner -> ECR pull, -> secrets read) |
+| **CloudWatch** | App Runner logs, automatic — production debugging lives here |
+
+Nothing in the application changes between environments: same containers, same code, same Anthropic calls; only where things run and where config comes from.
+
+### 3.5 AWS expansion triggers (documented, not built)
+Each additional service enters only when its feature does: **Lambda + EventBridge** when the Stripe or Graph webhooks are built (event-driven handlers); **S3** when email attachments are synced (object storage + DB pointers); **EC2 or ECS/Fargate** as an optional ops-learning migration after M8 works. **DynamoDB** intentionally unused — the data is relational; rationale in README.
 
 ---
 
@@ -344,6 +379,7 @@ Component inventory: see §9 frontend tree. Built with shadcn/ui primitives + Ta
 - OAuth: `msal`; `state` verified; refresh tokens Fernet-encrypted, key in env.
 - Tenancy: identity from JWT only; repositories and agent tools require `user_id`; two-user isolation test covers every resource type.
 - Transport: HTTPS; CORS restricted; rate limiting on auth routes.
+- Secrets: `.env` in dev (gitignored); AWS Secrets Manager in production, injected as env vars; never in code or images.
 - Data: seeded test mailbox for all development; real mailbox only with informed consent; bodies to the LLM API only.
 - Production hardening (documented, not built): reset/verification emails, MFA, RLS, audit log.
 
@@ -359,9 +395,10 @@ attache/
 ├── docker-compose.yml                 # pgvector/pgvector:pg16 + volume (M1)
 ├── docs/
 │   ├── ATTACHE_DESIGN.md              # this file — imported by CLAUDE.md
-│   └── decisions.md                   # design-drift log (living)
+│   ├── decisions.md                   # design-drift log (living)
+│   └── progress.md                    # session state file (living)
 ├── backend/
-│   ├── Dockerfile                     # prod image; build-tested from M1
+│   ├── Dockerfile                     # prod image; build-tested from M1; pushed to ECR at M8
 │   ├── pyproject.toml                 # fastapi sqlalchemy alembic pydantic
 │   │                                  # pydantic-settings argon2-cffi python-jose
 │   │                                  # cryptography msal httpx anthropic
@@ -439,10 +476,10 @@ attache/
             └── connection/page.tsx    # M2
 ```
 
-Structural rules: no `utils/`, `helpers/`, or `managers/` folders — everything has a home in the four backend layers or three frontend folders. ~60 files total for v1.
+Structural rules: no `utils/`, `helpers/`, or `managers/` folders — everything has a home in the four backend layers or three frontend folders. ~60 files total for v1. M8 adds no application files — it is deployment configuration only (AWS console/CLI + pushed image).
 
 ### Environment variables
-`DATABASE_URL`, `SECRET_KEY`, `FERNET_KEY`, `ANTHROPIC_API_KEY`, `EMBEDDINGS_API_KEY`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_REDIRECT_URI`, `FRONTEND_ORIGIN` — loaded once by pydantic-settings; missing values fail at startup.
+`DATABASE_URL`, `SECRET_KEY`, `FERNET_KEY`, `ANTHROPIC_API_KEY`, `EMBEDDINGS_API_KEY`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_REDIRECT_URI`, `FRONTEND_ORIGIN` — loaded once by pydantic-settings; missing values fail at startup. Dev source: `.env`. Production source: Secrets Manager -> App Runner env vars. Same names everywhere.
 
 ---
 
@@ -450,7 +487,7 @@ Structural rules: no `utils/`, `helpers/`, or `managers/` folders — everything
 
 The architecture already provides the seams; nothing below requires redesign.
 
-1. **Payments — Stripe** (test mode first): Checkout session -> hosted payment -> webhook `POST /stripe/webhook` updates entitlements. New table `subscriptions(user_id, stripe_customer_id, plan, status, current_period_end)` + one router. Same signed-callback pattern as the Graph OAuth flow.
+1. **Payments — Stripe** (test mode first): Checkout session -> hosted payment -> webhook `POST /stripe/webhook` updates entitlements. New table `subscriptions(user_id, stripe_customer_id, plan, status, current_period_end)` + one router. Same signed-callback pattern as the Graph OAuth flow. (Webhook handler is a future Lambda trigger — §3.5.)
 2. **Metering:** `usage_events(user_id, event_type, input_tokens, output_tokens, created_at)` written from `llm_client.py` — all Claude calls already pass through it. (Interim cost guard, buildable in ~1 hour: hard per-user monthly token cap checked in `llm_client`.)
 3. **Enforcement:** plan/quota check in services before triage batches and agent runs — one check covers API and worker since they share the services layer.
 
@@ -468,9 +505,10 @@ instructions.
 ## 12. Development Workflow (AI-assisted)
 
 - Claude Code sessions start fresh; CLAUDE.md (+ this doc via import) is the persistent context. **Doc drift is a bug**: design changes update this doc + `decisions.md` in the same commit.
+- `docs/progress.md` is the session state file (current milestone, done/in-progress/next, gotchas); updated with every commit per the CLAUDE.md rule; read at the start of each session.
 - Work plan-first, milestone-sized: name the milestone and section ("implement FR-4 per §6.3"), review the proposed plan against this doc, then implement. Commit every working increment.
 - Claude Code writes tests alongside code and runs them before "done."
-- Learning-goal role inversion: the agent loop, OAuth flow, and triage schema are written by the author and reviewed by Claude Code; CRUD, layouts, and boilerplate are delegated freely. Exit criterion: able to explain every line of `draft_agent.py` in an interview.
+- Learning model: Claude Code writes the code; the author learns by reviewing it. Every delivery is paired with a walkthrough — what the code does, why it is built that way, and what each tool/package introduced is for — written for a reader with no prior knowledge of the tooling. Depth scales with importance: the agent loop, OAuth flow, and triage schema get line-by-line treatment; CRUD and layouts get a summary. Exit criterion unchanged: able to explain every line of `draft_agent.py` in an interview.
 - Two-user rule: from M1 on, every feature is manually tested with two accounts.
 
 ---
@@ -501,9 +539,13 @@ Tool schemas + implementations; the loop (10-turn cap, trace); system prompt; wo
 check_consistency wired into agent; ConsistencyFlag UI; batch scan endpoint + results view; consistency eval set.
 **Done when:** a seeded contradicting draft is flagged with the policy text.
 
-### M7 — Hardening + ship
-Isolation test across all resources; failure-path tests; seed polish; README (diagrams, eval results, run instructions); demo video; deploy (Vercel + Railway/Render); future-work section (AWS, webhooks, Mail.Send, billing).
-**Done when:** a stranger can clone, seed, run, and understand it in 15 minutes.
+### M7 — Hardening + initial ship
+Isolation test across all resources; failure-path tests; seed polish; README (diagrams, eval results, run instructions); demo video; initial deploy (Vercel + Railway/Render).
+**Done when:** a stranger can clone, seed, run, and understand it in 15 minutes — and a live demo URL exists.
+
+### M8 — AWS production deployment
+AWS account + **Budget alert at $10 (first action, before any resource)**; ECR repo + image push; RDS Postgres 16 instance + `CREATE EXTENSION vector` + `alembic upgrade head`; Secrets Manager entries for all env vars; App Runner service from the ECR image with secrets injected + IAM roles (ECR pull, secrets read); production `MS_REDIRECT_URI` added to the Azure registration; frontend `NEXT_PUBLIC_API_URL` pointed at App Runner; verify logs in CloudWatch; smoke-test the full flow (signup -> connect -> sync -> triage -> draft) against production; README updated with the AWS architecture diagram; Railway/Render decommissioned.
+**Done when:** the full two-user flow works on the App Runner URL, RDS holds the data, no secrets exist outside Secrets Manager, and the month's AWS bill is under the alert threshold.
 
 ---
 
@@ -512,12 +554,15 @@ Isolation test across all resources; failure-path tests; seed polish; README (di
 - Azure app registration friction — buffer in M2; use a Microsoft 365 dev tenant.
 - Long threads vs context — truncate for triage; agent pulls history on demand.
 - Embedding model chosen in M4 and locked (dimension in schema; change = re-embed).
-- Open: Mail.Send (deferred; copy-to-Outlook is v1) · Graph webhooks (v1.5; needs public callback URL) · Stripe live mode (test mode only until real users).
+- AWS cost surprises — Budget alert first; stop/pause RDS between demo periods; App Runner scales to low idle cost.
+- RDS + pgvector: confirm extension availability on the chosen Postgres version at M8 (supported on RDS Postgres 15+; verify at setup).
+- Open: Mail.Send (deferred; copy-to-Outlook is v1) · Graph webhooks (v1.5; future Lambda trigger) · Stripe live mode (test mode only until real users) · EC2/ECS ops migration (optional v1.2, §3.5).
 
 ---
 
 ## 15. Change Log
 
+- v0.5 — AWS production deployment: minimal 5-service architecture (App Runner, RDS, ECR, Secrets Manager, IAM; CloudWatch free) as new M8; §3.4 environments rewritten; §3.5 expansion triggers (Lambda/S3/EC2 deferred to feature triggers; DynamoDB intentionally unused; Anthropic API direct, no Bedrock); progress.md formalized in tree + workflow + CLAUDE.md rules; M7 renamed "initial ship" (Railway/Render), decommissioned at M8.
 - v0.4 — consolidated: full repo tree (§9), UI design from mockups (§7), monetization plan (§10), CLAUDE.md (§11), AI-assisted workflow (§12), /metrics endpoint, decisions.md introduced.
 - v0.3 — implementation depth: layering, worker idempotency, agent pseudocode, auth flows, build order. Renamed to Attaché.
 - v0.2 — multi-tenancy, self-hosted Postgres, initial SRD.
