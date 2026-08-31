@@ -5,9 +5,9 @@ via CLAUDE.md, and updated in the same commit as the work it describes.
 Git history records what shipped; this file records the plan, the current
 position, and the next action.
 
-**Current position:** M1 (Skeleton + auth) → Phase C → `tests/conftest.py` next.
-Phases A and B complete; auth verified end-to-end against the live DB
-(two users, each seeing only their own `/auth/me`).
+**Current position:** M1 (Skeleton + auth) → Phase D (frontend shell) next.
+Phases A–C complete: 16 auth tests green, Docker image build-tested and
+verified to boot as a non-root user.
 
 Milestones and their exit criteria are defined in `ATTACHE_DESIGN.md` §13.
 Each is broken into phases, and each phase into parts, worked one at a time.
@@ -38,10 +38,10 @@ Each is broken into phases, and each phase into parts, worked one at a time.
 - [x] `app/main.py` — app factory, CORS, router registration, `/health`
 
 ### Phase C — Tests & container
-- [ ] `tests/conftest.py` — test DB + two-user fixtures
-- [ ] `tests/test_auth.py` — signup, login, wrong password, me-returns-own
-- [ ] `scripts/seed.py` — stub (becomes real in M3)
-- [ ] `backend/Dockerfile` — build-tested (the image M8 deploys)
+- [x] `tests/conftest.py` — `attache_test` DB, rollback-per-test, two-user fixtures
+- [x] `tests/test_auth.py` — 16 tests: signup, login, forged token, isolation
+- [x] `scripts/seed.py` — stub, idempotent (becomes real in M3)
+- [x] `backend/Dockerfile` — build-tested; runs non-root, no `--reload`
 
 ### Phase D — Frontend shell
 - [ ] Next.js + TS + Tailwind + shadcn init, `components.json`, `.env.local`
