@@ -5,8 +5,9 @@ via CLAUDE.md, and updated in the same commit as the work it describes.
 Git history records what shipped; this file records the plan, the current
 position, and the next action.
 
-**Current position:** M1 (Skeleton + auth) → Phase B → `api/deps.py` next.
-Phase A complete; Phase B parts 1–4 complete.
+**Current position:** M1 (Skeleton + auth) → Phase C → `tests/conftest.py` next.
+Phases A and B complete; auth verified end-to-end against the live DB
+(two users, each seeing only their own `/auth/me`).
 
 Milestones and their exit criteria are defined in `ATTACHE_DESIGN.md` §13.
 Each is broken into phases, and each phase into parts, worked one at a time.
@@ -32,9 +33,9 @@ Each is broken into phases, and each phase into parts, worked one at a time.
 - [x] Alembic baseline + `001_users.py`, applied
 - [x] `app/schemas.py` — signup / login / user-out
 - [x] `repositories/user_repo.py` — get_by_id / get_by_email / create
-- [ ] `api/deps.py` — `get_current_user`, identity from verified JWT only
-- [ ] `api/routers/auth.py` — signup / login (sets JWT cookie) / me
-- [ ] `app/main.py` — app factory, CORS, router registration
+- [x] `api/deps.py` — `get_current_user`, identity from verified JWT only
+- [x] `api/routers/auth.py` — signup / login (sets JWT cookie) / logout / me
+- [x] `app/main.py` — app factory, CORS, router registration, `/health`
 
 ### Phase C — Tests & container
 - [ ] `tests/conftest.py` — test DB + two-user fixtures
